@@ -1,0 +1,908 @@
+<?xml version="1.0" encoding="utf-8"?>
+<model version="NetLogo 7.0.4" snapToGrid="false">
+  <code><![CDATA[;; ============================================================================
+;; SIMULATION SIR — PROPAGATION EPIDEMIQUE (PALUDISME / PESTE) — MADAGASCAR
+;; ============================================================================
+;; Projet academique - Master
+;; Domaine : Systemes Multi-Agents, Epidemiologie, Sante Publique
+;; Modele : Diffusion SIR avec vecteurs et corridors de mobilite
+;; ============================================================================
+
+breed [ humans human ]   ;; Population humaine
+breed [ vectors vector ]  ;; Vecteurs (moustiques / puces)
+breed [ villages village ] ;; Villages (hubs de population)
+
+humans-own [
+  state          ;; "susceptible" "infectious" "recovered" "dead"
+  target-village ;; Village de destination
+  home-village   ;; Village d'origine
+  ticks-sick     ;; Duree de l'infection
+]
+
+vectors-own [
+  infected?      ;; Porteur du pathogene ?
+]
+
+globals [
+  total-dead
+  total-infected
+  total-recovered
+  peak-infected
+  epidemic-day
+]
+
+patches-own [
+  is-corridor?   ;; Corridor de mobilite
+  base-pcolor
+]
+
+;; ============================================================================
+;; SETUP
+;; ============================================================================
+
+to setup
+  clear-all
+  set-default-shape humans "person"
+  set-default-shape vectors "circle"
+  set-default-shape villages "house"
+
+  set total-dead 0
+  set total-infected initial-infected
+  set total-recovered 0
+  set peak-infected 0
+  set epidemic-day 0
+
+  setup-environment
+  setup-villages
+  setup-humans
+  setup-vectors
+  reset-ticks
+end
+
+to setup-environment
+  ask patches [
+    set is-corridor? false
+    set pcolor green + 2
+    set base-pcolor pcolor
+  ]
+  ;; Creer corridors entre villages (axes de transport)
+  let v-coords [[-10 -10] [10 10] [-10 10] [10 -10] [0 0]]
+  foreach v-coords [ c1 ->
+    foreach v-coords [ c2 ->
+      if c1 != c2 [
+        let x1 item 0 c1
+        let y1 item 1 c1
+        let x2 item 0 c2
+        let y2 item 1 c2
+        ask patches [
+          if (distancexy x1 y1) + (distancexy x2 y2) < (sqrt ((x1 - x2) ^ 2 + (y1 - y2) ^ 2)) + 0.3 [
+            set is-corridor? true
+            set pcolor grey
+            set base-pcolor grey
+          ]
+        ]
+      ]
+    ]
+  ]
+end
+
+to setup-villages
+  create-villages 5 [
+    let c item who [[-10 -10] [10 10] [-10 10] [10 -10] [0 0]]
+    setxy item 0 c item 1 c
+    set color white
+    set size 3
+  ]
+end
+
+to setup-humans
+  create-humans initial-human-pop [
+    set state "susceptible"
+    set home-village one-of villages
+    move-to home-village
+    set color blue
+    set size 1.2
+    set ticks-sick 0
+    set target-village nobody
+  ]
+  ask n-of initial-infected humans [
+    set state "infectious"
+    set color red
+  ]
+end
+
+to setup-vectors
+  create-vectors initial-vector-pop [
+    set infected? false
+    set color yellow
+    setxy random-xcor random-ycor
+    set size 0.8
+  ]
+  ;; Vecteurs initiaux infectes
+  ask n-of (initial-vector-pop / 5) vectors [
+    set infected? true
+    set color orange
+  ]
+end
+
+;; ============================================================================
+;; GO
+;; ============================================================================
+
+to go
+  if not any? humans with [state = "infectious"] and
+     not any? vectors with [infected?] [ stop ]
+
+  ask humans [ human-move ]
+  ask vectors [ vector-move ]
+  transmit-disease
+  ask humans [ check-health ]
+  update-statistics
+  tick
+end
+
+to human-move
+  if state = "dead" [ stop ]
+  if random 1000 < mobility-frequency [
+    set target-village one-of villages
+  ]
+  ifelse target-village != nobody [
+    face target-village
+    ifelse [is-corridor?] of patch-here [
+      fd 0.3
+    ] [
+      rt random 20 - 10
+      fd 0.15
+    ]
+    if distance target-village < 1 [ set target-village nobody ]
+  ] [
+    rt random 40 - 20
+    fd 0.05
+  ]
+end
+
+to vector-move
+  rt random 60 - 30
+  fd 0.4
+  if random 100 < 3 [ hatch 1 ]
+  if count vectors > (initial-vector-pop * 2) [
+    ask one-of vectors [ die ]
+  ]
+end
+
+to transmit-disease
+  ;; Vecteur sain pique humain infecte
+  ask vectors with [ not infected? ] [
+    if any? humans-here with [ state = "infectious" ] [
+      if random-float 100 < transmission-rate [
+        set infected? true
+        set color orange
+      ]
+    ]
+  ]
+  ;; Vecteur infecte pique humain sain
+  ask humans with [ state = "susceptible" ] [
+    if any? vectors-here with [ infected? ] [
+      if random-float 100 < transmission-rate [
+        set state "infectious"
+        set color red
+        set total-infected total-infected + 1
+      ]
+    ]
+  ]
+end
+
+to check-health
+  if state = "infectious" [
+    set ticks-sick ticks-sick + 1
+    if ticks-sick > 50 [
+      ifelse random-float 100 < mortality-rate [
+        set state "dead"
+        set color grey
+        set total-dead total-dead + 1
+      ] [
+        if random-float 100 < recovery-chance [
+          set state "recovered"
+          set color green
+          set total-recovered total-recovered + 1
+        ]
+      ]
+    ]
+  ]
+end
+
+to update-statistics
+  let current-infected count humans with [state = "infectious"]
+  if current-infected > peak-infected [
+    set peak-infected current-infected
+    set epidemic-day ticks
+  ]
+end
+
+;; ============================================================================
+;; REPORTERS
+;; ============================================================================
+
+to-report nb-sains
+  report count humans with [state = "susceptible"]
+end
+
+to-report nb-infectes
+  report count humans with [state = "infectious"]
+end
+
+to-report nb-gueris
+  report count humans with [state = "recovered"]
+end
+
+to-report nb-morts
+  report total-dead
+end
+
+to-report taux-mortalite
+  ifelse total-infected > 0 [
+    report precision (total-dead / total-infected * 100) 1
+  ] [ report 0 ]
+end
+
+to-report taux-infection
+  ifelse any? humans [
+    report precision (count humans with [state = "infectious"] / count humans * 100) 1
+  ] [ report 0 ]
+end
+
+to-report etat-epidemie
+  let n count humans with [state = "infectious"]
+  ifelse n = 0 [ report "TERMINEE" ]
+  [ ifelse n < 10 [ report "Faible" ]
+    [ ifelse n < 50 [ report "Moderee" ]
+      [ ifelse n < 100 [ report "Elevee" ]
+        [ report "CRITIQUE" ] ] ] ]
+end
+
+to export-data-csv
+  let filename (word "epidemie_data_" ticks ".csv")
+  if file-exists? filename [ file-delete filename ]
+  file-open filename
+  file-print "tick,sains,infectes,gueris,morts,vecteurs_infectes,taux_infection,taux_mortalite"
+  file-print (word ticks ","
+    count humans with [state = "susceptible"] ","
+    count humans with [state = "infectious"] ","
+    count humans with [state = "recovered"] ","
+    total-dead ","
+    count vectors with [infected?] ","
+    taux-infection ","
+    taux-mortalite)
+  file-close
+  user-message (word "Donnees exportees : " filename)
+end
+
+;; ============================================================================
+;; FIN DU CODE
+;; ============================================================================]]></code>
+  <widgets>
+    <view x="350" wrappingAllowedX="true" y="10" frameRate="30.0" minPycor="-25" height="514" showTickCounter="true" patchSize="10.0" fontSize="10" wrappingAllowedY="true" width="513" tickCounterLabel="ticks" maxPycor="25" updateMode="1" maxPxcor="25" minPxcor="-25"></view>
+    <button x="10" actionKey="S" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" display="SETUP" width="75" sizeVersion="0">setup</button>
+    <button x="90" actionKey="G" y="10" height="40" disableUntilTicks="true" forever="true" kind="Observer" display="GO" width="70" sizeVersion="0">go</button>
+    <button x="165" actionKey="O" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" display="GO ONCE" width="80" sizeVersion="0">go</button>
+    <button x="250" actionKey="R" y="10" height="40" disableUntilTicks="false" forever="false" kind="Observer" display="RESET" width="90" sizeVersion="0">clear-all
+reset-ticks</button>
+    <slider x="10" step="10" y="55" max="500" display="initial-human-pop" height="33" min="10" direction="Horizontal" default="100.0" variable="initial-human-pop" units="humains" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="10" y="90" max="1000" display="initial-vector-pop" height="33" min="10" direction="Horizontal" default="200.0" variable="initial-vector-pop" units="vecteurs" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="1" y="125" max="20" display="initial-infected" height="33" min="1" direction="Horizontal" default="5.0" variable="initial-infected" units="cas" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="1" y="160" max="100" display="transmission-rate" height="33" min="0" direction="Horizontal" default="15.0" variable="transmission-rate" units="%" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="1" y="195" max="100" display="recovery-chance" height="33" min="0" direction="Horizontal" default="5.0" variable="recovery-chance" units="%" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="1" y="230" max="100" display="mortality-rate" height="33" min="0" direction="Horizontal" default="2.0" variable="mortality-rate" units="%" width="330" sizeVersion="0"></slider>
+    <slider x="10" step="1" y="265" max="100" display="mobility-frequency" height="33" min="0" direction="Horizontal" default="10.0" variable="mobility-frequency" units="NIL" width="330" sizeVersion="0"></slider>
+    <monitor x="10" precision="0" y="310" height="45" fontSize="11" display="Sains" width="78" sizeVersion="0">nb-sains</monitor>
+    <monitor x="93" precision="0" y="310" height="45" fontSize="11" display="Infectes" width="78" sizeVersion="0">nb-infectes</monitor>
+    <monitor x="176" precision="0" y="310" height="45" fontSize="11" display="Gueris" width="78" sizeVersion="0">nb-gueris</monitor>
+    <monitor x="259" precision="0" y="310" height="45" fontSize="11" display="Morts" width="78" sizeVersion="0">nb-morts</monitor>
+    <monitor x="10" precision="1" y="360" height="45" fontSize="11" display="Taux infection (%)" width="160" sizeVersion="0">taux-infection</monitor>
+    <monitor x="175" precision="1" y="360" height="45" fontSize="11" display="Taux mortalite (%)" width="162" sizeVersion="0">taux-mortalite</monitor>
+    <monitor x="10" precision="0" y="410" height="45" fontSize="11" display="Pic epidemique" width="160" sizeVersion="0">peak-infected</monitor>
+    <monitor x="175" precision="0" y="410" height="45" fontSize="11" display="Jour du pic" width="162" sizeVersion="0">epidemic-day</monitor>
+    <monitor x="870" precision="17" y="10" height="45" fontSize="11" display="Etat epidemie" width="310" sizeVersion="0">etat-epidemie</monitor>
+    <monitor x="870" precision="0" y="60" height="45" fontSize="11" display="Vecteurs infectes" width="155" sizeVersion="0">count vectors with [infected?]</monitor>
+    <monitor x="1030" precision="0" y="60" height="45" fontSize="11" display="Total infectes" width="150" sizeVersion="0">total-infected</monitor>
+    <plot x="870" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="population" y="115" xMin="0.0" height="180" legend="true" xMax="100.0" yMin="0.0" xAxis="ticks" display="Courbe SIR" width="410" sizeVersion="0">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="Sains" color="-13345367" legend="true">
+        <setup></setup>
+        <update>plot count humans with [state = &quot;susceptible&quot;]</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Infectes" color="-2674135" legend="true">
+        <setup></setup>
+        <update>plot count humans with [state = &quot;infectious&quot;]</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Gueris" color="-10899396" legend="true">
+        <setup></setup>
+        <update>plot count humans with [state = &quot;recovered&quot;]</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Morts" color="-7500403" legend="true">
+        <setup></setup>
+        <update>plot total-dead</update>
+      </pen>
+    </plot>
+    <plot x="870" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="nombre" y="300" xMin="0.0" height="160" legend="true" xMax="100.0" yMin="0.0" xAxis="ticks" display="Vecteurs" width="410" sizeVersion="0">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="Sains" color="-1184463" legend="true">
+        <setup></setup>
+        <update>plot count vectors with [not infected?]</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Infectes" color="-955883" legend="true">
+        <setup></setup>
+        <update>plot count vectors with [infected?]</update>
+      </pen>
+    </plot>
+    <plot x="870" autoPlotX="true" yMax="100.0" autoPlotY="true" yAxis="%" y="465" xMin="0.0" height="140" legend="true" xMax="100.0" yMin="0.0" xAxis="ticks" display="Indicateurs" width="410" sizeVersion="0">
+      <setup></setup>
+      <update></update>
+      <pen interval="1.0" mode="0" display="Taux infection" color="-2674135" legend="true">
+        <setup></setup>
+        <update>plot taux-infection</update>
+      </pen>
+      <pen interval="1.0" mode="0" display="Taux mortalite" color="-7500403" legend="true">
+        <setup></setup>
+        <update>plot taux-mortalite</update>
+      </pen>
+    </plot>
+    <button x="10" actionKey="E" y="465" height="45" disableUntilTicks="false" forever="false" kind="Observer" display="EXPORTER DONNEES CSV" width="165" sizeVersion="0">export-data-csv</button>
+    <note x="10" y="520" backgroundDark="0" fontSize="12" width="330" markdown="false" height="30" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">Simulation Epidemie Madagascar - Master
+[S]etup [G]o [O]nce [R]eset [E]xport</note>
+  </widgets>
+  <info><![CDATA[## SIMULATION SIR — PROPAGATION EPIDEMIQUE — MADAGASCAR
+
+### CONTEXTE ACADEMIQUE
+
+Ce modele simule la propagation du **paludisme** et de la **peste** a Madagascar.
+Il s'inscrit dans l'etude des **Systemes Multi-Agents (SMA)** et de l'**epidemiologie computationnelle**.
+Contexte : endemies recurrentes a Madagascar, epidemie de peste 2017.
+
+## AGENTS
+
+- **Humains** : Susceptible (bleu) → Infecte (rouge) → Gueri (vert) / Mort (gris)
+- **Vecteurs** : Moustiques/puces — Sains (jaune) → Infectes (orange)
+- **Villages** : 5 hubs de population relies par corridors de mobilite
+
+## PARAMETRES
+
+- **initial-human-pop** : Population humaine initiale
+- **initial-vector-pop** : Nombre de vecteurs (moustiques/puces)
+- **initial-infected** : Cas initiaux
+- **transmission-rate** : Probabilite de transmission au contact (%)
+- **recovery-chance** : Probabilite de guerison par tick (%)
+- **mortality-rate** : Probabilite de deces par tick (%)
+- **mobility-frequency** : Intensite des deplacements inter-villages
+
+## CONCEPT ILLUSTRE
+
+Diffusion SIR et role des corridors de mobilite dans la propagation epidemique.
+
+## REFERENCES
+
+- OMS — Rapports sur la Peste a Madagascar (2017)
+- Kermack & McKendrick (1927) — Modele SIR
+- Wilensky, U. (1999) — NetLogo
+
+### CONTEXTE ACADÉMIQUE
+
+Ce modèle simule le comportement collectif des abeilles butineuses (*Apis mellifera*) dans un environnement agricole soumis à diverses pressions environnementales. Il s'inscrit dans le cadre de l'étude des **Systèmes Multi-Agents (SMA)**, de l'**Intelligence en Essaim (Swarm Intelligence)** et de l'**écologie computationnelle**.
+
+## OBJECTIF DU MODÈLE
+
+Étudier comment les abeilles, par leur comportement collectif et leur intelligence distribuée :
+- Optimisent la collecte de nectar
+- Maximisent la pollinisation
+- Réagissent aux perturbations environnementales (pesticides, climat, ressources)
+- Maintiennent la viabilité de la colonie
+
+## ARCHITECTURE DU MODÈLE
+
+### Agents principaux
+1. **Abeilles** (*bees*) : agents mobiles autonomes avec machine à états (recherche → collecte → retour → repos → danse)
+2. **Fleurs** (*flowers*) : ressources statiques avec cycle de vie (bourgeon → ouverte → fanée)
+3. **Ruches** (*hives*) : agents stationnaires gérant la colonie
+4. **Phéromones** (*pheromones*) : marqueurs chimiques pour la communication indirecte
+
+### Environnement
+- Patches représentant le terrain : zones fertiles, pesticides, eau, obstacles
+- Cycle jour/nuit avec activité réduite la nuit
+- 4 saisons influençant température et floraison
+- Météo dynamique : ensoleillé, pluie, vent, sécheresse
+
+## ALGORITHMES IMPLÉMENTÉS
+
+### 1. Recherche bio-inspirée (foraging)
+Les abeilles utilisent une combinaison de :
+- **Exploitation** : retour vers fleurs mémorisées (mémoire individuelle)
+- **Exploration** : marche aléatoire avec biais (Lévy flight simplifié)
+- **Stigmergie** : suivi de phéromones déposées par d'autres abeilles
+- **Sélection gloutonne** : choix de la fleur maximisant `(nectar × attractivité) / distance`
+
+### 2. Communication par danse frétillante
+Inspirée des travaux de Karl von Frisch (Prix Nobel 1973). Quand une abeille trouve une source riche, elle "danse" à la ruche pour transmettre la position aux autres abeilles.
+
+### 3. Apprentissage et mémoire
+- **Mémoire individuelle** : chaque abeille mémorise jusqu'à 5 positions de fleurs riches
+- **Mémoire collective** : la ruche centralise les meilleures positions partagées
+
+### 4. Machine à états comportementale
+```
+[recherche] → [collecte] → [retour] → [danse] → [recherche]
+                                   ↓
+                                [repos] (si fatiguée/nuit)
+```
+
+## VARIABLES DE CONTRÔLE
+
+### Sliders
+- **nb-ruches** : Nombre de ruches dans l'environnement (1-5)
+- **nb-abeilles-par-ruche** : Population initiale par ruche (5-100)
+- **nb-fleurs-initial** : Nombre de fleurs au démarrage (20-500)
+- **intensite-pesticides** : Toxicité des zones contaminées (0-100%)
+- **nb-zones-pesticides** : Nombre de zones contaminées (0-10)
+- **taille-zones-pesticides** : Rayon des zones toxiques (2-10)
+
+### Switches
+- **meteo-active?** : Active le cycle météorologique dynamique
+- **pesticides-actives?** : Active les zones de pesticides
+- **reproduction-active?** : Permet la naissance de nouvelles abeilles
+
+## UTILISATION
+
+### Démarrage
+1. Cliquez sur **SETUP** (ou tapez S) pour initialiser la simulation
+2. Cliquez sur **GO** (ou tapez G) pour lancer la simulation continue
+3. **GO ONCE** (O) exécute un seul pas de simulation
+4. **EXPORTER DONNÉES CSV** (E) sauvegarde l'état actuel
+
+### Lecture visuelle
+- **Abeilles jaunes** : abeilles saines
+- **Abeilles rouges** : abeilles contaminées par pesticides
+- **Patches verts** : zone agricole / fertile
+- **Patches rouges** : zones de pesticides
+- **Patches bleus** : sources d'eau
+- **Patches marrons** : obstacles
+- **Cercles cyan** : phéromones (communication)
+- **Ruches** : maisons jaunes (vertes/rouges selon santé)
+
+## SCÉNARIOS EXPÉRIMENTAUX SUGGÉRÉS
+
+### Scénario A : Impact des pesticides
+Faire varier `intensite-pesticides` de 0 à 100 et mesurer :
+- Survie de la colonie
+- Taux de pollinisation
+- Production de miel
+
+### Scénario B : Stress climatique
+Activer `meteo-active?` et observer l'effet de la sécheresse répétée sur la production.
+
+### Scénario C : Densité florale
+Faire varier `nb-fleurs-initial` pour étudier la relation ressources/population.
+
+### Scénario D : Résilience de la colonie
+Tester la capacité de récupération après une crise (pesticide intense puis arrêté).
+
+## INDICATEURS MESURÉS
+
+- **Taux de pollinisation** : % de fleurs pollinisées
+- **Efficacité de la colonie** : ratio survie/naissances
+- **Rendement agricole** : indicateur composite (pollinisation + miel)
+- **Mortalité différenciée** : pesticide vs vieillesse vs épuisement
+- **Énergie/santé moyennes** de la population
+
+## EXTENSIONS POSSIBLES
+
+- Implémentation d'un **algorithme génétique** pour faire évoluer les paramètres comportementaux
+- Ajout d'un **réseau de neurones** pour la prise de décision
+- **Apprentissage par renforcement** (Q-learning) sur les choix de fleurs
+- Simulation de **maladies de la colonie** (Varroa, CCD)
+- Pollinisateurs concurrents (autres insectes)
+- Pathfinding A* pour évitement intelligent d'obstacles
+
+## RÉFÉRENCES SCIENTIFIQUES
+
+1. von Frisch, K. (1967). *The Dance Language and Orientation of Bees*
+2. Seeley, T. D. (1995). *The Wisdom of the Hive*
+3. Bonabeau, E., Dorigo, M., & Theraulaz, G. (1999). *Swarm Intelligence: From Natural to Artificial Systems*
+4. Wilensky, U. (1999). *NetLogo*. Center for Connected Learning, Northwestern University
+
+## AUTEUR
+
+Projet académique - Simulation Multi-Agents
+Master Informatique / Intelligence Artificielle
+]]></info>
+  <turtleShapes>
+    <shape name="default" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="5"></point>
+        <point x="40" y="250"></point>
+        <point x="150" y="205"></point>
+        <point x="260" y="250"></point>
+      </polygon>
+    </shape>
+    <shape name="arrow" rotatable="true" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="0"></point>
+        <point x="0" y="150"></point>
+        <point x="105" y="150"></point>
+        <point x="105" y="293"></point>
+        <point x="195" y="293"></point>
+        <point x="195" y="150"></point>
+        <point x="300" y="150"></point>
+      </polygon>
+    </shape>
+    <shape name="bee" rotatable="true" editableColorIndex="0">
+      <polygon color="-303222273" filled="true" marked="false">
+        <point x="152" y="149"></point>
+        <point x="77" y="163"></point>
+        <point x="67" y="195"></point>
+        <point x="67" y="211"></point>
+        <point x="74" y="234"></point>
+        <point x="85" y="252"></point>
+        <point x="100" y="264"></point>
+        <point x="116" y="276"></point>
+        <point x="134" y="286"></point>
+        <point x="151" y="300"></point>
+        <point x="167" y="285"></point>
+        <point x="182" y="278"></point>
+        <point x="206" y="260"></point>
+        <point x="220" y="242"></point>
+        <point x="226" y="218"></point>
+        <point x="226" y="195"></point>
+        <point x="222" y="166"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="150" y="149"></point>
+        <point x="128" y="151"></point>
+        <point x="114" y="151"></point>
+        <point x="98" y="145"></point>
+        <point x="80" y="122"></point>
+        <point x="80" y="103"></point>
+        <point x="81" y="83"></point>
+        <point x="95" y="67"></point>
+        <point x="117" y="58"></point>
+        <point x="141" y="54"></point>
+        <point x="151" y="53"></point>
+        <point x="177" y="55"></point>
+        <point x="195" y="66"></point>
+        <point x="207" y="82"></point>
+        <point x="211" y="94"></point>
+        <point x="211" y="116"></point>
+        <point x="204" y="139"></point>
+        <point x="189" y="149"></point>
+        <point x="171" y="152"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="151" y="54"></point>
+        <point x="119" y="59"></point>
+        <point x="96" y="60"></point>
+        <point x="81" y="50"></point>
+        <point x="78" y="39"></point>
+        <point x="87" y="25"></point>
+        <point x="103" y="18"></point>
+        <point x="115" y="23"></point>
+        <point x="121" y="13"></point>
+        <point x="150" y="1"></point>
+        <point x="180" y="14"></point>
+        <point x="189" y="23"></point>
+        <point x="197" y="17"></point>
+        <point x="210" y="19"></point>
+        <point x="222" y="30"></point>
+        <point x="222" y="44"></point>
+        <point x="212" y="57"></point>
+        <point x="192" y="58"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="70" y="185"></point>
+        <point x="74" y="171"></point>
+        <point x="223" y="172"></point>
+        <point x="224" y="186"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="67" y="211"></point>
+        <point x="71" y="226"></point>
+        <point x="224" y="226"></point>
+        <point x="225" y="211"></point>
+        <point x="67" y="211"></point>
+      </polygon>
+      <polygon color="255" filled="true" marked="false">
+        <point x="91" y="257"></point>
+        <point x="106" y="269"></point>
+        <point x="195" y="269"></point>
+        <point x="211" y="255"></point>
+      </polygon>
+      <line endX="70" startY="100" marked="false" color="-1" endY="87" startX="144"></line>
+      <line endX="45" startY="87" marked="false" color="-1" endY="87" startX="70"></line>
+      <line endX="26" startY="86" marked="false" color="-1" endY="97" startX="45"></line>
+      <line endX="22" startY="96" marked="false" color="-1" endY="115" startX="26"></line>
+      <line endX="25" startY="115" marked="false" color="-1" endY="130" startX="22"></line>
+      <line endX="37" startY="131" marked="false" color="-1" endY="141" startX="26"></line>
+      <line endX="55" startY="141" marked="false" color="-1" endY="144" startX="37"></line>
+      <line endX="143" startY="143" marked="false" color="-1" endY="101" startX="55"></line>
+      <line endX="227" startY="100" marked="false" color="-1" endY="138" startX="141"></line>
+      <line endX="241" startY="138" marked="false" color="-1" endY="137" startX="227"></line>
+      <line endX="249" startY="137" marked="false" color="-1" endY="129" startX="241"></line>
+      <line endX="254" startY="129" marked="false" color="-1" endY="110" startX="249"></line>
+      <line endX="248" startY="108" marked="false" color="-1" endY="97" startX="253"></line>
+      <line endX="235" startY="95" marked="false" color="-1" endY="82" startX="249"></line>
+      <line endX="144" startY="82" marked="false" color="-1" endY="100" startX="235"></line>
+    </shape>
+    <shape name="circle" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+    </shape>
+    <shape name="circle 2" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+    </shape>
+    <shape name="flower" rotatable="false" editableColorIndex="0">
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="135" y="120"></point>
+        <point x="165" y="165"></point>
+        <point x="180" y="210"></point>
+        <point x="180" y="240"></point>
+        <point x="150" y="300"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="240"></point>
+        <point x="195" y="195"></point>
+        <point x="165" y="135"></point>
+      </polygon>
+      <circle x="85" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="147" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="192" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="85" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="40" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="177" y="132" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="70" y="85" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="130" y="25" marked="true" color="-1920102913" diameter="38" filled="true"></circle>
+      <circle x="96" y="51" marked="true" color="-1920102913" diameter="108" filled="true"></circle>
+      <circle x="113" y="68" marked="false" color="255" diameter="74" filled="true"></circle>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="189" y="233"></point>
+        <point x="219" y="188"></point>
+        <point x="249" y="173"></point>
+        <point x="279" y="188"></point>
+        <point x="234" y="218"></point>
+      </polygon>
+      <polygon color="1504722175" filled="true" marked="false">
+        <point x="180" y="255"></point>
+        <point x="150" y="210"></point>
+        <point x="105" y="210"></point>
+        <point x="75" y="240"></point>
+        <point x="135" y="240"></point>
+      </polygon>
+    </shape>
+    <shape name="hive-shape" rotatable="false" editableColorIndex="0">
+      <rectangle endX="240" startY="90" marked="false" color="-303222273" endY="270" startX="60" filled="true"></rectangle>
+      <rectangle endX="170" startY="240" marked="false" color="255" endY="270" startX="130" filled="true"></rectangle>
+      <line endX="240" startY="120" marked="false" color="255" endY="120" startX="60"></line>
+      <line endX="240" startY="150" marked="false" color="255" endY="150" startX="60"></line>
+      <line endX="240" startY="180" marked="false" color="255" endY="180" startX="60"></line>
+      <line endX="240" startY="210" marked="false" color="255" endY="210" startX="60"></line>
+      <polygon color="-1653716737" filled="true" marked="false">
+        <point x="45" y="90"></point>
+        <point x="150" y="30"></point>
+        <point x="255" y="90"></point>
+        <point x="255" y="100"></point>
+        <point x="45" y="100"></point>
+      </polygon>
+    </shape>
+    <shape name="house" rotatable="false" editableColorIndex="0">
+      <rectangle endX="255" startY="120" marked="true" color="-1920102913" endY="285" startX="45" filled="true"></rectangle>
+      <rectangle endX="180" startY="210" marked="false" color="255" endY="285" startX="120" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="15" y="120"></point>
+        <point x="150" y="15"></point>
+        <point x="285" y="120"></point>
+      </polygon>
+      <line endX="270" startY="120" marked="false" color="255" endY="120" startX="30"></line>
+    </shape>
+    <shape name="leaf" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="210"></point>
+        <point x="135" y="195"></point>
+        <point x="120" y="210"></point>
+        <point x="60" y="210"></point>
+        <point x="30" y="195"></point>
+        <point x="60" y="180"></point>
+        <point x="60" y="165"></point>
+        <point x="15" y="135"></point>
+        <point x="30" y="120"></point>
+        <point x="15" y="105"></point>
+        <point x="40" y="104"></point>
+        <point x="45" y="90"></point>
+        <point x="60" y="90"></point>
+        <point x="90" y="105"></point>
+        <point x="105" y="120"></point>
+        <point x="120" y="120"></point>
+        <point x="105" y="60"></point>
+        <point x="120" y="60"></point>
+        <point x="135" y="30"></point>
+        <point x="150" y="15"></point>
+        <point x="165" y="30"></point>
+        <point x="180" y="60"></point>
+        <point x="195" y="60"></point>
+        <point x="180" y="120"></point>
+        <point x="195" y="120"></point>
+        <point x="210" y="105"></point>
+        <point x="240" y="90"></point>
+        <point x="255" y="90"></point>
+        <point x="263" y="104"></point>
+        <point x="285" y="105"></point>
+        <point x="270" y="120"></point>
+        <point x="285" y="135"></point>
+        <point x="240" y="165"></point>
+        <point x="240" y="180"></point>
+        <point x="270" y="195"></point>
+        <point x="240" y="210"></point>
+        <point x="180" y="210"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="135" y="195"></point>
+        <point x="135" y="240"></point>
+        <point x="120" y="255"></point>
+        <point x="105" y="255"></point>
+        <point x="105" y="285"></point>
+        <point x="135" y="285"></point>
+        <point x="165" y="240"></point>
+        <point x="165" y="195"></point>
+      </polygon>
+    </shape>
+    <shape name="person" rotatable="false" editableColorIndex="0">
+      <circle x="110" y="5" marked="true" color="-1920102913" diameter="80" filled="true"></circle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="120" y="195"></point>
+        <point x="90" y="285"></point>
+        <point x="105" y="300"></point>
+        <point x="135" y="300"></point>
+        <point x="150" y="225"></point>
+        <point x="165" y="300"></point>
+        <point x="195" y="300"></point>
+        <point x="210" y="285"></point>
+        <point x="180" y="195"></point>
+        <point x="195" y="90"></point>
+      </polygon>
+      <rectangle endX="172" startY="79" marked="true" color="-1920102913" endY="94" startX="127" filled="true"></rectangle>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="195" y="90"></point>
+        <point x="240" y="150"></point>
+        <point x="225" y="180"></point>
+        <point x="165" y="105"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="105" y="90"></point>
+        <point x="60" y="150"></point>
+        <point x="75" y="180"></point>
+        <point x="135" y="105"></point>
+      </polygon>
+    </shape>
+    <shape name="square" rotatable="false" editableColorIndex="0">
+      <rectangle endX="270" startY="30" marked="true" color="-1920102913" endY="270" startX="30" filled="true"></rectangle>
+    </shape>
+    <shape name="target" rotatable="false" editableColorIndex="0">
+      <circle x="0" y="0" marked="true" color="-1920102913" diameter="300" filled="true"></circle>
+      <circle x="30" y="30" marked="false" color="255" diameter="240" filled="true"></circle>
+      <circle x="60" y="60" marked="true" color="-1920102913" diameter="180" filled="true"></circle>
+      <circle x="90" y="90" marked="false" color="255" diameter="120" filled="true"></circle>
+      <circle x="120" y="120" marked="true" color="-1920102913" diameter="60" filled="true"></circle>
+    </shape>
+    <shape name="triangle" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="150" y="30"></point>
+        <point x="15" y="255"></point>
+        <point x="285" y="255"></point>
+      </polygon>
+    </shape>
+    <shape name="x" rotatable="false" editableColorIndex="0">
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="270" y="75"></point>
+        <point x="225" y="30"></point>
+        <point x="30" y="225"></point>
+        <point x="75" y="270"></point>
+      </polygon>
+      <polygon color="-1920102913" filled="true" marked="true">
+        <point x="30" y="75"></point>
+        <point x="75" y="30"></point>
+        <point x="270" y="225"></point>
+        <point x="225" y="270"></point>
+      </polygon>
+    </shape>
+  </turtleShapes>
+  <linkShapes>
+    <shape name="default" curviness="0.0">
+      <lines>
+        <line x="-0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+        <line x="0.0" visible="true">
+          <dash value="1.0"></dash>
+          <dash value="0.0"></dash>
+        </line>
+        <line x="0.2" visible="false">
+          <dash value="0.0"></dash>
+          <dash value="1.0"></dash>
+        </line>
+      </lines>
+      <indicator>
+        <shape name="link direction" rotatable="true" editableColorIndex="0">
+          <line endX="90" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+          <line endX="210" startY="150" marked="true" color="-1920102913" endY="180" startX="150"></line>
+        </shape>
+      </indicator>
+    </shape>
+  </linkShapes>
+  <previewCommands>setup
+repeat 200 [ go ]</previewCommands>
+  <experiments>
+    <experiment name="exp1_transmission" repetitions="3" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="1000">
+      <setup>setup</setup>
+      <go>go</go>
+      <metrics>
+        <metric>count humans with [state = "susceptible"]</metric>
+        <metric>count humans with [state = "infectious"]</metric>
+        <metric>count humans with [state = "recovered"]</metric>
+        <metric>total-dead</metric>
+        <metric>taux-infection</metric>
+        <metric>taux-mortalite</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="initial-human-pop">
+          <value value="100"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-vector-pop">
+          <value value="200"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="transmission-rate" first="5" step="10" last="50"></steppedValueSet>
+        <enumeratedValueSet variable="recovery-chance">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="mortality-rate">
+          <value value="2"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="mobility-frequency">
+          <value value="10"></value>
+        </enumeratedValueSet>
+      </constants>
+    </experiment>
+    <experiment name="exp2_mobilite" repetitions="3" sequentialRunOrder="true" runMetricsEveryStep="false" timeLimit="1000">
+      <setup>setup</setup>
+      <go>go</go>
+      <metrics>
+        <metric>count humans with [state = "infectious"]</metric>
+        <metric>total-dead</metric>
+        <metric>peak-infected</metric>
+        <metric>epidemic-day</metric>
+      </metrics>
+      <constants>
+        <enumeratedValueSet variable="initial-human-pop">
+          <value value="100"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-vector-pop">
+          <value value="200"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="initial-infected">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="transmission-rate">
+          <value value="15"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="recovery-chance">
+          <value value="5"></value>
+        </enumeratedValueSet>
+        <enumeratedValueSet variable="mortality-rate">
+          <value value="2"></value>
+        </enumeratedValueSet>
+        <steppedValueSet variable="mobility-frequency" first="0" step="20" last="100"></steppedValueSet>
+      </constants>
+    </experiment>
+  </experiments>
+</model>
