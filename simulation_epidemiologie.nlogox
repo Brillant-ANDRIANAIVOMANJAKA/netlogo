@@ -353,168 +353,234 @@ reset-ticks</button>
     <note x="10" y="520" backgroundDark="0" fontSize="12" width="330" markdown="false" height="30" textColorDark="-1" textColorLight="-16777216" backgroundLight="0">Simulation Epidemie Madagascar - Master
 [S]etup [G]o [O]nce [R]eset [E]xport</note>
   </widgets>
-  <info><![CDATA[## SIMULATION SIR — PROPAGATION EPIDEMIQUE — MADAGASCAR
+  <info>
+  <![CDATA[
+## SIMULATION SIR — PROPAGATION EPIDEMIQUE (PALUDISME / PESTE) — MADAGASCAR
 
 ### CONTEXTE ACADEMIQUE
 
-Ce modele simule la propagation du **paludisme** et de la **peste** a Madagascar.
-Il s'inscrit dans l'etude des **Systemes Multi-Agents (SMA)** et de l'**epidemiologie computationnelle**.
-Contexte : endemies recurrentes a Madagascar, epidemie de peste 2017.
+Ce modele simule la propagation epidemique du **paludisme** et de la **peste** a Madagascar a travers une approche de **Systemes Multi-Agents (SMA)** et d'**epidemiologie computationnelle**.
 
-## AGENTS
+Le projet s'inspire des epidemies recurrentes observees a Madagascar, notamment :
+- les flambées de paludisme dans les zones tropicales,
+- l'epidemie de peste de 2017 ayant touche plusieurs regions du pays.
 
-- **Humains** : Susceptible (bleu) → Infecte (rouge) → Gueri (vert) / Mort (gris)
-- **Vecteurs** : Moustiques/puces — Sains (jaune) → Infectes (orange)
-- **Villages** : 5 hubs de population relies par corridors de mobilite
+Le modele permet d'etudier :
+- la diffusion spatiale des maladies,
+- le role des vecteurs biologiques,
+- l'impact des deplacements humains entre villages,
+- les dynamiques de contamination et de mortalite.
 
-## PARAMETRES
+## OBJECTIF DU MODELE
 
-- **initial-human-pop** : Population humaine initiale
-- **initial-vector-pop** : Nombre de vecteurs (moustiques/puces)
-- **initial-infected** : Cas initiaux
-- **transmission-rate** : Probabilite de transmission au contact (%)
-- **recovery-chance** : Probabilite de guerison par tick (%)
-- **mortality-rate** : Probabilite de deces par tick (%)
-- **mobility-frequency** : Intensite des deplacements inter-villages
+Analyser comment une maladie infectieuse se propage dans une population humaine via :
+- les contacts indirects avec des vecteurs infectes,
+- la mobilite inter-villages,
+- les interactions locales entre agents.
 
-## CONCEPT ILLUSTRE
+Le modele cherche egalement a :
+- observer les pics epidemiques,
+- mesurer les taux d'infection et de mortalite,
+- evaluer l'impact de la mobilite sur la propagation,
+- simuler des scenarios epidemiologiques.
 
-Diffusion SIR et role des corridors de mobilite dans la propagation epidemique.
-
-## REFERENCES
-
-- OMS — Rapports sur la Peste a Madagascar (2017)
-- Kermack & McKendrick (1927) — Modele SIR
-- Wilensky, U. (1999) — NetLogo
-
-### CONTEXTE ACADÉMIQUE
-
-Ce modèle simule le comportement collectif des abeilles butineuses (*Apis mellifera*) dans un environnement agricole soumis à diverses pressions environnementales. Il s'inscrit dans le cadre de l'étude des **Systèmes Multi-Agents (SMA)**, de l'**Intelligence en Essaim (Swarm Intelligence)** et de l'**écologie computationnelle**.
-
-## OBJECTIF DU MODÈLE
-
-Étudier comment les abeilles, par leur comportement collectif et leur intelligence distribuée :
-- Optimisent la collecte de nectar
-- Maximisent la pollinisation
-- Réagissent aux perturbations environnementales (pesticides, climat, ressources)
-- Maintiennent la viabilité de la colonie
-
-## ARCHITECTURE DU MODÈLE
+## ARCHITECTURE DU MODELE
 
 ### Agents principaux
-1. **Abeilles** (*bees*) : agents mobiles autonomes avec machine à états (recherche → collecte → retour → repos → danse)
-2. **Fleurs** (*flowers*) : ressources statiques avec cycle de vie (bourgeon → ouverte → fanée)
-3. **Ruches** (*hives*) : agents stationnaires gérant la colonie
-4. **Phéromones** (*pheromones*) : marqueurs chimiques pour la communication indirecte
+
+1. **Humains** (*humans*)
+   - Agents mobiles representant la population humaine
+   - Etats possibles :
+     - Susceptible (bleu)
+     - Infectieux (rouge)
+     - Gueri (vert)
+     - Mort (gris)
+
+2. **Vecteurs** (*vectors*)
+   - Moustiques ou puces transportant le pathogene
+   - Etats :
+     - Sain (jaune)
+     - Infecte (orange)
+
+3. **Villages** (*villages*)
+   - Centres de population relies par mobilite
+   - Servent de hubs de diffusion epidemique
 
 ### Environnement
-- Patches représentant le terrain : zones fertiles, pesticides, eau, obstacles
-- Cycle jour/nuit avec activité réduite la nuit
-- 4 saisons influençant température et floraison
-- Météo dynamique : ensoleillé, pluie, vent, sécheresse
 
-## ALGORITHMES IMPLÉMENTÉS
+- Monde compose de patches representant le territoire
+- Corridors de mobilite simulant :
+  - routes,
+  - axes de transport,
+  - circulation entre villages
+- Diffusion spatiale de la maladie selon les mouvements des agents
 
-### 1. Recherche bio-inspirée (foraging)
-Les abeilles utilisent une combinaison de :
-- **Exploitation** : retour vers fleurs mémorisées (mémoire individuelle)
-- **Exploration** : marche aléatoire avec biais (Lévy flight simplifié)
-- **Stigmergie** : suivi de phéromones déposées par d'autres abeilles
-- **Sélection gloutonne** : choix de la fleur maximisant `(nectar × attractivité) / distance`
+## MODELE EPIDEMIOLOGIQUE SIR
 
-### 2. Communication par danse frétillante
-Inspirée des travaux de Karl von Frisch (Prix Nobel 1973). Quand une abeille trouve une source riche, elle "danse" à la ruche pour transmettre la position aux autres abeilles.
+Le modele suit la logique SIR :
 
-### 3. Apprentissage et mémoire
-- **Mémoire individuelle** : chaque abeille mémorise jusqu'à 5 positions de fleurs riches
-- **Mémoire collective** : la ruche centralise les meilleures positions partagées
+- **S — Susceptible**
+  Individu sain pouvant etre infecte
 
-### 4. Machine à états comportementale
-```
-[recherche] → [collecte] → [retour] → [danse] → [recherche]
-                                   ↓
-                                [repos] (si fatiguée/nuit)
-```
+- **I — Infectious**
+  Individu infecte pouvant transmettre la maladie
 
-## VARIABLES DE CONTRÔLE
+- **R — Recovered**
+  Individu gueri et immunise
+
+- **D — Dead**
+  Individu decede suite a la maladie
+
+## MECANISMES IMPLEMENTES
+
+### 1. Mobilite humaine
+
+Les humains peuvent :
+- rester dans leur village,
+- voyager vers un autre village,
+- emprunter les corridors de mobilite.
+
+Cette mobilite accelere la propagation de la maladie.
+
+### 2. Transmission vectorielle
+
+Les vecteurs :
+- se deplacent aleatoirement,
+- contaminent les humains sains,
+- deviennent infectes apres contact avec des humains infectieux.
+
+### 3. Evolution sanitaire
+
+Un humain infecte peut :
+- guerir,
+- mourir,
+- continuer a transmettre la maladie.
+
+Ces probabilites dependent des parametres du modele.
+
+## VARIABLES DE CONTROLE
 
 ### Sliders
-- **nb-ruches** : Nombre de ruches dans l'environnement (1-5)
-- **nb-abeilles-par-ruche** : Population initiale par ruche (5-100)
-- **nb-fleurs-initial** : Nombre de fleurs au démarrage (20-500)
-- **intensite-pesticides** : Toxicité des zones contaminées (0-100%)
-- **nb-zones-pesticides** : Nombre de zones contaminées (0-10)
-- **taille-zones-pesticides** : Rayon des zones toxiques (2-10)
 
-### Switches
-- **meteo-active?** : Active le cycle météorologique dynamique
-- **pesticides-actives?** : Active les zones de pesticides
-- **reproduction-active?** : Permet la naissance de nouvelles abeilles
+- **initial-human-pop**
+  Population humaine initiale
+
+- **initial-vector-pop**
+  Nombre initial de vecteurs
+
+- **initial-infected**
+  Nombre initial de cas infectes
+
+- **transmission-rate**
+  Probabilite de transmission (%)
+
+- **recovery-chance**
+  Probabilite de guerison (%)
+
+- **mortality-rate**
+  Probabilite de mortalite (%)
+
+- **mobility-frequency**
+  Intensite des deplacements humains
 
 ## UTILISATION
 
-### Démarrage
-1. Cliquez sur **SETUP** (ou tapez S) pour initialiser la simulation
-2. Cliquez sur **GO** (ou tapez G) pour lancer la simulation continue
-3. **GO ONCE** (O) exécute un seul pas de simulation
-4. **EXPORTER DONNÉES CSV** (E) sauvegarde l'état actuel
+### Execution
 
-### Lecture visuelle
-- **Abeilles jaunes** : abeilles saines
-- **Abeilles rouges** : abeilles contaminées par pesticides
-- **Patches verts** : zone agricole / fertile
-- **Patches rouges** : zones de pesticides
-- **Patches bleus** : sources d'eau
-- **Patches marrons** : obstacles
-- **Cercles cyan** : phéromones (communication)
-- **Ruches** : maisons jaunes (vertes/rouges selon santé)
+1. Cliquer sur **SETUP**
+   Initialise :
+   - les villages,
+   - les humains,
+   - les vecteurs,
+   - l'environnement.
 
-## SCÉNARIOS EXPÉRIMENTAUX SUGGÉRÉS
+2. Cliquer sur **GO**
+   Lance la simulation en continu.
 
-### Scénario A : Impact des pesticides
-Faire varier `intensite-pesticides` de 0 à 100 et mesurer :
-- Survie de la colonie
-- Taux de pollinisation
-- Production de miel
+3. Observer :
+   - la propagation de la maladie,
+   - les pics d'infection,
+   - l'evolution des populations.
 
-### Scénario B : Stress climatique
-Activer `meteo-active?` et observer l'effet de la sécheresse répétée sur la production.
+## LECTURE VISUELLE
 
-### Scénario C : Densité florale
-Faire varier `nb-fleurs-initial` pour étudier la relation ressources/population.
+### Humains
+- Bleu → sain
+- Rouge → infecte
+- Vert → gueri
+- Gris → mort
 
-### Scénario D : Résilience de la colonie
-Tester la capacité de récupération après une crise (pesticide intense puis arrêté).
+### Vecteurs
+- Jaune → sain
+- Orange → infecte
 
-## INDICATEURS MESURÉS
+### Environnement
+- Vert → terrain normal
+- Gris → corridor de mobilite
+- Blanc → village
 
-- **Taux de pollinisation** : % de fleurs pollinisées
-- **Efficacité de la colonie** : ratio survie/naissances
-- **Rendement agricole** : indicateur composite (pollinisation + miel)
-- **Mortalité différenciée** : pesticide vs vieillesse vs épuisement
-- **Énergie/santé moyennes** de la population
+## INDICATEURS MESURES
+
+Le modele mesure :
+
+- Nombre d'infectes
+- Nombre de gueris
+- Nombre de morts
+- Nombre de personnes saines
+- Pic epidemique
+- Jour du pic epidemique
+- Taux d'infection
+- Taux de mortalite
+
+## SCENARIOS EXPERIMENTAUX
+
+### Scenario 1 — Forte mobilite
+
+Augmenter `mobility-frequency`
+→ propagation rapide entre villages.
+
+### Scenario 2 — Forte mortalite
+
+Augmenter `mortality-rate`
+→ hausse des deces.
+
+### Scenario 3 — Transmission faible
+
+Reduire `transmission-rate`
+→ ralentissement epidemique.
+
+### Scenario 4 — Forte densite vectorielle
+
+Augmenter `initial-vector-pop`
+→ contamination acceleree.
 
 ## EXTENSIONS POSSIBLES
 
-- Implémentation d'un **algorithme génétique** pour faire évoluer les paramètres comportementaux
-- Ajout d'un **réseau de neurones** pour la prise de décision
-- **Apprentissage par renforcement** (Q-learning) sur les choix de fleurs
-- Simulation de **maladies de la colonie** (Varroa, CCD)
-- Pollinisateurs concurrents (autres insectes)
-- Pathfinding A* pour évitement intelligent d'obstacles
+- Ajout d'hopitaux et centres de soins
+- Vaccination de la population
+- Quarantaine et confinement
+- Carte reelle de Madagascar
+- Variantes de maladies
+- Donnees statistiques reelles
+- IA predictive des epidemies
 
-## RÉFÉRENCES SCIENTIFIQUES
+## REFERENCES SCIENTIFIQUES
 
-1. von Frisch, K. (1967). *The Dance Language and Orientation of Bees*
-2. Seeley, T. D. (1995). *The Wisdom of the Hive*
-3. Bonabeau, E., Dorigo, M., & Theraulaz, G. (1999). *Swarm Intelligence: From Natural to Artificial Systems*
-4. Wilensky, U. (1999). *NetLogo*. Center for Connected Learning, Northwestern University
+1. Kermack, W. O., & McKendrick, A. G. (1927)
+   *A Contribution to the Mathematical Theory of Epidemics*
+
+2. OMS — Rapports sur la Peste a Madagascar (2017)
+
+3. Wilensky, U. (1999)
+   *NetLogo*. Center for Connected Learning and Computer-Based Modeling
 
 ## AUTEUR
 
-Projet académique - Simulation Multi-Agents
+Projet academique — Simulation Multi-Agents
 Master Informatique / Intelligence Artificielle
-]]></info>
+Domaine : Epidemiologie computationnelle et SMA
+]]>
+  </info>
   <turtleShapes>
     <shape name="default" rotatable="true" editableColorIndex="0">
       <polygon color="-1920102913" filled="true" marked="true">
