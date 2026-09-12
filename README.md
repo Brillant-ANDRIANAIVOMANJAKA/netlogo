@@ -39,9 +39,7 @@
 
 ---
 
-## 🎨 CODE COULEUR VISUEL
-
-- 🔵 **Humain bleu** : Sain (Susceptible)
+## 🎨 CODE COULEURPaludisme- 🔵 **Humain bleu** : Sain (Susceptible)
 - 🔴 **Humain rouge** : Infecté (Infectious)
 - 🟢 **Humain vert** : Guéri (Recovered)
 - ⚪ **Humain gris** : Décédé (Dead)
